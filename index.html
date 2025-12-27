@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solespress – Tracking Spedizioni</title>
+  <!-- Libreria ZXing per scansione barcode (più affidabile su mobile) -->
+  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: #000000;
+      color: #ffffff;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: #111111;
+      border-bottom: 2px solid #FFD700;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .navbar a {
+      color: #FFD700;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 16px;
+      padding: 10px 20px;
+      border: 2px solid #FFD700;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .navbar a:hover {
+      background: #FFD700;
+      color: #000000;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(255, 215, 0, 0.3);
+    }
+
+    .navbar a.active {
+      background: #FFD700;
+      color: #000000;
+    }
+
+    .main-content {
+      padding: 20px;
+    }
+
+    .modal {
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background-color: #1a1a1a;
+      padding: 30px;
+      border: 2px solid #FFD700;
+      border-radius: 8px;
+      max-width: 600px;
+      width: 90%;
+      position: relative;
+    }
+    .modal-content h3 {
+      color: #FFD700;
+      margin-top: 0;
+    }
+    .close-modal {
+      position: absolute;
+      right: 15px;
+      top: 10px;
+      font-size: 28px;
+      font-weight: bold;
+      color: #FFD700;
+      cursor: pointer;
+    }
+    .close-modal:hover {
+      color: #fff;
+    }
+    #messaggio-text {
+      background-color: #2a2a2a;
+      color: #fff;
+      border: 1px solid #FFD700;
+      border-radius: 4px;
+      resize: vertical;
+    }
+
+    /* Stili Scanner Barcode */
+    #scanner-modal .modal-content {
+      max-width: 800px;
+      width: 95%;
+    }
+
+    #scanner-reader {
+      width: 100%;
+      border: 2px solid #FFD700;
+      border-radius: 8px;
+      overflow: hidden;
+      background-color: #000;
+      position: relative;
+    }
+
+    #scanner-video {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    #scanner-result {
+      margin-top: 15px;
+      padding: 15px;
+      background-color: #2a2a2a;
+      border: 2px solid #28a745;
+      border-radius: 8px;
+      color: #28a745;
+      font-weight: bold;
+      text-align: center;
+      display: none;
+    }
+
+    .scanner-controls {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .scanner-controls button {
+      padding: 12px 24px;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+
+    .stop-scanner {
+      background-color: #dc3545;
+      color: white;
+    }
+
+    .scan-icon {
+      min-width: 46px;
+      min-height: 46px;
+      padding: 8px;
+      background-color: #FFD700;
+      color: #000;
+      font-weight: bold;
+      font-size: 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: .2s;
+    }
+
+    .scan-icon:hover {
+      background: #FFC700;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(255, 215, 0, 0.3);
+    }
+
+    .shipping-table-section {
+      background: #111111;
+      border: 1px solid #1f1f1f;
+      border-radius: 14px;
+      padding: 25px;
+      max-width: 1400px;
+      margin: 0 auto;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .shipping-table-section h2 {
+      color: #FFD700;
+      font-size: 1.8rem;
+      margin: 0 0 25px 0;
+      font-weight: 700;
+    }
+
+    .logo-header {
+      margin: 0 0 25px 0;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .logo-header img {
+      max-width: 300px;
+      height: auto;
+      transition: transform 0.2s;
+    }
+
+    .logo-header img:hover {
+      transform: scale(1.05);
+    }
+
+    .shipping-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 15px;
+    }
+
+    .shipping-table thead {
+      background: #1a1a1a;
+    }
+
+    .shipping-table th {
+      color: #FFD700;
+      text-align: left;
+      padding: 14px 12px;
+      font-weight: 700;
+      font-size: 15px;
+      border-bottom: 2px solid #FFD700;
+    }
+
+    .shipping-table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #1f1f1f;
+    }
+
+    .shipping-table input[type="text"] {
+      width: 100%;
+      background: #0f0f0f;
+      color: #e9e9e9;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-size: 16px;
+      outline: none;
+      transition: .2s;
+      min-height: 46px;
+    }
+
+    .shipping-table input:focus {
+      border-color: #FFD700;
+      background: #1a1a1a;
+      box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.1);
+    }
+
+    .shipping-table button {
+      background: #F5D142;
+      color: #000000;
+      border: none;
+      border-radius: 6px;
+      padding: 11px 18px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      transition: .2s;
+      white-space: nowrap;
+      min-height: 46px;
+      min-width: 75px;
+    }
+
+    .shipping-table button:hover {
+      background: #FFD700;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(255, 215, 0, 0.3);
+    }
+
+    .shipping-table .elimina-riga {
+      background: #ff4040;
+      color: #ffffff;
+    }
+
+    .shipping-table .elimina-riga:hover {
+      background: #ff0000;
+      box-shadow: 0 4px 8px rgba(255, 64, 64, 0.3);
+    }
+
+    .add-row-btn {
+      background: #1a1a1a;
+      color: #FFD700;
+      border: 2px solid #FFD700;
+      border-radius: 8px;
+      padding: 14px 24px;
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+      transition: .2s;
+      width: 100%;
+    }
+
+    .add-row-btn:hover {
+      background: #FFD700;
+      color: #000000;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(255, 215, 0, 0.3);
+    }
+
+    /* Tablet (768px - 1024px) */
+    @media screen and (max-width: 1024px) {
+      body {
+        padding: 15px;
+      }
+
+      .shipping-table-section {
+        padding: 20px;
+      }
+
+      .shipping-table-section h2 {
+        font-size: 1.5rem;
+      }
+
+      .shipping-table th {
+        font-size: 14px;
+        padding: 12px 10px;
+      }
+
+      .shipping-table td {
+        padding: 10px 8px;
+      }
+
+      .shipping-table input[type="text"] {
+        font-size: 16px;
+        padding: 11px 12px;
+      }
+
+      .shipping-table button {
+        padding: 11px 14px;
+        font-size: 13px;
+        min-width: 70px;
+      }
+    }
+
+    /* Mobile (max 767px) */
+    @media screen and (max-width: 767px) {
+      body {
+        padding: 12px;
+      }
+
+      .shipping-table-section {
+        padding: 15px;
+        border-radius: 10px;
+      }
+
+      .shipping-table-section h2 {
+        font-size: 1.3rem;
+        margin-bottom: 15px;
+      }
+
+      .logo-header {
+        margin-bottom: 15px;
+      }
+
+      .logo-header img {
+        max-width: 200px;
+      }
+
+      .shipping-table {
+        font-size: 14px;
+        display: block;
+        width: 100%;
+      }
+
+      .shipping-table thead,
+      .shipping-table tbody,
+      .shipping-table th,
+      .shipping-table td,
+      .shipping-table tr {
+        display: block;
+      }
+
+      .shipping-table thead {
+        display: none;
+      }
+
+      .shipping-table tr {
+        margin-bottom: 18px;
+        border: 2px solid #FFD700;
+        border-radius: 10px;
+        padding: 15px;
+        background-color: rgba(26, 26, 26, 0.6);
+      }
+
+      .shipping-table td {
+        display: flex;
+        flex-direction: column;
+        padding: 10px 0;
+        border: none;
+        text-align: left;
+      }
+
+      .shipping-table td:before {
+        content: attr(data-label);
+        font-weight: bold;
+        color: #FFD700;
+        margin-bottom: 6px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      /* Pulsanti su mobile in una riga - ora con 5 colonne includendo Scan */
+      .shipping-table td:nth-child(4),
+      .shipping-table td:nth-child(5),
+      .shipping-table td:nth-child(6),
+      .shipping-table td:nth-child(7),
+      .shipping-table td:nth-child(8) {
+        display: inline-block;
+        width: 19%;
+        padding: 5px 2px;
+      }
+
+      .shipping-table td:nth-child(4):before,
+      .shipping-table td:nth-child(5):before,
+      .shipping-table td:nth-child(6):before,
+      .shipping-table td:nth-child(7):before,
+      .shipping-table td:nth-child(8):before {
+        display: none;
+      }
+
+      .shipping-table button {
+        width: 100%;
+        font-size: 11px;
+        padding: 11px 4px;
+        min-width: unset;
+      }
+
+      .scan-icon {
+        font-size: 18px;
+        padding: 11px 4px;
+      }
+
+      .shipping-table input[type="text"] {
+        width: 100%;
+        font-size: 16px;
+        padding: 12px 10px;
+      }
+
+      .modal-content {
+        padding: 18px;
+        width: 95%;
+        max-width: 95%;
+      }
+
+      .modal-content h3 {
+        font-size: 1.2rem;
+      }
+
+      #messaggio-text {
+        font-size: 14px;
+      }
+
+      .add-row-btn {
+        padding: 15px;
+        font-size: 15px;
+      }
+
+      /* Scanner ottimizzato per mobile */
+      #scanner-modal .modal-content {
+        padding: 10px;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      #scanner-reader {
+        max-height: 50vh;
+      }
+
+      .scanner-controls button {
+        font-size: 13px;
+        padding: 10px 16px;
+        flex: 1;
+        min-width: 120px;
+      }
+    }
+
+    /* Mobile piccoli (max 480px) */
+    @media screen and (max-width: 480px) {
+      body {
+        padding: 10px;
+      }
+
+      .shipping-table-section {
+        padding: 12px;
+      }
+
+      .shipping-table-section h2 {
+        font-size: 1.2rem;
+      }
+
+      .shipping-table tr {
+        padding: 12px;
+        margin-bottom: 15px;
+      }
+
+      .modal-content {
+        padding: 15px;
+      }
+
+      .close-modal {
+        right: 10px;
+        top: 5px;
+        font-size: 24px;
+      }
+
+      #messaggio-text {
+        font-size: 13px;
+        padding: 8px;
+      }
+
+      #scanner-modal .modal-content {
+        padding: 8px;
+      }
+
+      #scanner-modal h3 {
+        font-size: 1rem;
+        margin-bottom: 8px;
+      }
+
+      #scanner-modal p {
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+
+      .scanner-controls button {
+        font-size: 12px;
+        padding: 8px 12px;
+      }
+    }
+
+    /* Landscape mobile */
+    @media screen and (max-width: 767px) and (orientation: landscape) {
+      .shipping-table thead {
+        display: table-header-group;
+      }
+
+      .shipping-table tr {
+        display: table-row;
+        border: none;
+        padding: 0;
+        margin-bottom: 0;
+      }
+
+      .shipping-table td {
+        display: table-cell;
+        padding: 8px;
+      }
+
+      .shipping-table td:before {
+        display: none;
+      }
+
+      .shipping-table td:nth-child(4),
+      .shipping-table td:nth-child(5),
+      .shipping-table td:nth-child(6),
+      .shipping-table td:nth-child(7),
+      .shipping-table td:nth-child(8) {
+        display: table-cell;
+        width: auto;
+        padding: 8px;
+      }
+
+      /* Scanner in landscape */
+      #scanner-reader {
+        max-height: 60vh;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="index.html" class="active">📦 Tracking Spedizioni</a>
+    <a href="email-sender.html">📧 Invio Email</a>
+  </nav>
+
+  <div class="main-content">
+    <section id="griglia-spedizioni" class="shipping-table-section">
+    <div class="logo-header" onclick="refreshPage()">
+      <img src="media/solespress7272push.png" alt="Solespress Tracking" title="Clicca per aggiornare">
+    </div>
+    <table class="shipping-table">
+      <thead>
+        <tr>
+          <th>Mittente</th>
+          <th>Destinatario</th>
+          <th>N° Tracking / Link</th>
+          <th>Scan</th>
+          <th>Apri</th>
+          <th>Copia</th>
+          <th>Invia</th>
+          <th>Elimina</th>
+        </tr>
+      </thead>
+      <tbody id="tabella-body">
+        <tr>
+          <td data-label="Mittente"><input type="text" placeholder="Nome mittente"></td>
+          <td data-label="Destinatario"><input type="text" placeholder="Nome destinatario"></td>
+          <td data-label="N° Tracking"><input type="text" placeholder="N° tracking o URL"></td>
+          <td data-label="Scan"><button class="scan-icon scan-barcode" title="Scansiona barcode">📷</button></td>
+          <td data-label="Apri"><button class="apri-link">Vai</button></td>
+          <td data-label="Copia"><button class="copia-link">Copia</button></td>
+          <td data-label="Invia"><button class="invia-messaggio">Invia</button></td>
+          <td data-label="Elimina"><button class="elimina-riga">Elimina</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <button id="aggiungi-riga" class="add-row-btn">+ Aggiungi riga</button>
+  </section>
+
+  <!-- Modale per messaggio tracking -->
+  <div id="messaggio-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <span class="close-modal">&times;</span>
+      <h3>Messaggio Tracking</h3>
+      <textarea id="messaggio-text" readonly rows="8" style="width: 100%; padding: 10px; font-family: inherit; margin-bottom: 10px;"></textarea>
+      <button id="copia-messaggio" class="add-row-btn">Copia Messaggio</button>
+    </div>
+  </div>
+
+  <!-- Modale per scanner barcode -->
+  <div id="scanner-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <span class="close-modal" id="close-scanner">&times;</span>
+      <h3>Scansiona Codice Lettera di Vettura</h3>
+      <p style="color: #ccc; font-size: 14px; margin-bottom: 15px;">
+        Posiziona il barcode davanti alla fotocamera o usa uno scanner USB
+      </p>
+      <div id="scanner-loading" style="text-align: center; padding: 20px; color: #FFD700; font-size: 16px;">
+        📷 Attivazione fotocamera in corso...
+      </div>
+      <div id="scanner-reader" style="display: none;">
+        <video id="scanner-video" playsinline autoplay></video>
+      </div>
+      <div id="scanner-result"></div>
+      <div class="scanner-controls">
+        <button id="stop-scanner" class="stop-scanner" style="display: none;">⏹ Ferma Scanner</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Funzione per refresh pagina
+    function refreshPage() {
+      // Cancella tutti i campi input
+      const inputs = document.querySelectorAll('#tabella-body input[type="text"]');
+      inputs.forEach(input => input.value = '');
+
+      // Ricarica la pagina
+      location.reload();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('aggiungi-riga');
+      const body = document.getElementById('tabella-body');
+
+      if (btn) {
+        btn.addEventListener('click', () => {
+          const righe = body.querySelectorAll('tr');
+          if (righe.length >= 10) {
+            alert('Hai raggiunto il massimo di 10 righe');
+            return;
+          }
+
+          if (righe.length > 0) {
+            const ultimaRiga = righe[righe.length - 1];
+            const inputs = ultimaRiga.querySelectorAll('input[type="text"]');
+            const mittente = inputs[0] ? inputs[0].value.trim() : '';
+            const destinatario = inputs[1] ? inputs[1].value.trim() : '';
+            const tracking = inputs[2] ? inputs[2].value.trim() : '';
+
+            if (!mittente || !destinatario || !tracking) {
+              alert('Compila tutti i campi della riga precedente prima di aggiungerne una nuova');
+              return;
+            }
+          }
+
+          const nuovaRiga = document.createElement('tr');
+          nuovaRiga.innerHTML = `
+            <td data-label="Mittente"><input type="text" placeholder="Nome mittente"></td>
+            <td data-label="Destinatario"><input type="text" placeholder="Nome destinatario"></td>
+            <td data-label="N° Tracking"><input type="text" placeholder="N° tracking o URL"></td>
+            <td data-label="Scan"><button class="scan-icon scan-barcode" title="Scansiona barcode">📷</button></td>
+            <td data-label="Apri"><button class="apri-link">Vai</button></td>
+            <td data-label="Copia"><button class="copia-link">Copia</button></td>
+            <td data-label="Invia"><button class="invia-messaggio">Invia</button></td>
+            <td data-label="Elimina"><button class="elimina-riga">Elimina</button></td>
+          `;
+          body.appendChild(nuovaRiga);
+        });
+      }
+
+      function buildTrackingUrl(input) {
+        if (!input) return null;
+        input = input.trim();
+
+        if (input.match(/^https?:\/\//i)) {
+          return input;
+        }
+
+        if (/^1Z[A-Z0-9]+$/i.test(input)) {
+          return `https://www.ups.com/track?track=yes&trackNums=${input}&loc=it_IT&requester=ST/trackdetails`;
+        }
+
+        if (/^\d{10,11}$/.test(input)) {
+          return `https://www.dhl.com/it-en/home/tracking.html?tracking-id=${input}&submit=1`;
+        }
+
+        if (/^\d{13}$/.test(input)) {
+          return `https://www.poste.it/cerca/index.html#/risultati-spedizioni/${input}`;
+        }
+
+        if (/^\d{12}$/.test(input) || /^\d{14,}$/.test(input)) {
+          return `https://www.fedex.com/fedextrack/duplicate-results/select?duplicateTrackingId=${input}&trknbr=${input}`;
+        }
+
+        if (input.includes('.') && !input.includes(' ')) {
+          return `https://${input}`;
+        }
+
+        if (/^\d+$/.test(input)) {
+          return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(input)}`;
+        }
+
+        return null;
+      }
+
+      document.addEventListener('click', e => {
+        if (e.target.classList.contains('apri-link')) {
+          const row = e.target.closest('tr');
+          const inputs = row.querySelectorAll('input[type="text"]');
+          const trackingInput = inputs[2];
+          const input = trackingInput ? trackingInput.value : '';
+          const trackingUrl = buildTrackingUrl(input);
+
+          if (trackingUrl) {
+            window.open(trackingUrl, '_blank');
+          } else {
+            alert('Inserisci un numero di tracking o un link valido');
+          }
+        }
+
+        if (e.target.classList.contains('copia-link')) {
+          const row = e.target.closest('tr');
+          const inputs = row.querySelectorAll('input[type="text"]');
+          const trackingInput = inputs[2];
+          const input = trackingInput ? trackingInput.value : '';
+          const trackingUrl = buildTrackingUrl(input);
+
+          if (trackingUrl) {
+            navigator.clipboard.writeText(trackingUrl).then(() => {
+              const btn = e.target;
+              const originalText = btn.textContent;
+              btn.textContent = '✓';
+              btn.style.backgroundColor = '#28a745';
+
+              setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.backgroundColor = '';
+              }, 2000);
+            }).catch(err => {
+              alert('Errore durante la copia: ' + err);
+            });
+          } else {
+            alert('Inserisci un numero di tracking o un link valido');
+          }
+        }
+
+        if (e.target.classList.contains('invia-messaggio')) {
+          const row = e.target.closest('tr');
+          const inputs = row.querySelectorAll('input[type="text"]');
+          const mittente = inputs[0] ? inputs[0].value.trim() : '';
+          const destinatario = inputs[1] ? inputs[1].value.trim() : '';
+          const trackingInput = inputs[2] ? inputs[2].value.trim() : '';
+
+          if (!mittente || !destinatario || !trackingInput) {
+            alert('Compila tutti i campi (Mittente, Destinatario e N° Tracking)');
+            return;
+          }
+
+          const trackingUrl = buildTrackingUrl(trackingInput);
+          if (!trackingUrl) {
+            alert('Numero di tracking non valido');
+            return;
+          }
+
+          const messaggio = `Gentile ${destinatario},
+
+La spedizione da parte di ${mittente} è stata inviata.
+
+Codice di monitoraggio: ${trackingInput}
+
+Puoi tracciare la tua spedizione al seguente link:
+${trackingUrl}
+
+Cordiali saluti,
+${mittente}`;
+
+          const modal = document.getElementById('messaggio-modal');
+          const textarea = document.getElementById('messaggio-text');
+          textarea.value = messaggio;
+          modal.style.display = 'flex';
+        }
+
+        if (e.target.classList.contains('elimina-riga')) {
+          const righe = body.querySelectorAll('tr');
+
+          if (righe.length <= 1) {
+            alert('Devi mantenere almeno una riga nella tabella');
+            return;
+          }
+
+          const row = e.target.closest('tr');
+          row.remove();
+        }
+      });
+
+      const modal = document.getElementById('messaggio-modal');
+      const closeBtn = document.querySelector('.close-modal');
+
+      closeBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+      });
+
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.style.display = 'none';
+        }
+      });
+
+      document.getElementById('copia-messaggio').addEventListener('click', () => {
+        const textarea = document.getElementById('messaggio-text');
+        textarea.select();
+        navigator.clipboard.writeText(textarea.value).then(() => {
+          const btn = document.getElementById('copia-messaggio');
+          const originalText = btn.textContent;
+          btn.textContent = '✓ Messaggio Copiato!';
+          btn.style.backgroundColor = '#28a745';
+
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.backgroundColor = '';
+          }, 2000);
+        }).catch(err => {
+          alert('Errore durante la copia: ' + err);
+        });
+      });
+
+      // ============================================
+      // SCANNER BARCODE - LETTERE DI VETTURA (ZXing)
+      // ============================================
+
+      let videoStream = null;
+      let codeReader = null;
+      let currentScannerInput = null;
+      let isScanning = false;
+
+      // Gestione click su pulsante scanner
+      document.addEventListener('click', e => {
+        if (e.target.classList.contains('scan-barcode')) {
+          const row = e.target.closest('tr');
+          const inputs = row.querySelectorAll('input[type="text"]');
+          currentScannerInput = inputs[2]; // Campo tracking
+
+          // Apri modale scanner
+          const scannerModal = document.getElementById('scanner-modal');
+          scannerModal.style.display = 'flex';
+
+          // Reset risultato precedente
+          const resultDiv = document.getElementById('scanner-result');
+          resultDiv.style.display = 'none';
+          resultDiv.textContent = '';
+
+          // Mostra loading, nascondi reader
+          document.getElementById('scanner-loading').style.display = 'block';
+          document.getElementById('scanner-reader').style.display = 'none';
+
+          // AVVIA AUTOMATICAMENTE LO SCANNER
+          setTimeout(() => {
+            startScanner();
+          }, 300);
+        }
+      });
+
+      // Funzione per avviare lo scanner con ZXing
+      async function startScanner() {
+        if (isScanning) return;
+
+        try {
+          // Crea il code reader ZXing
+          const hints = new Map();
+          const formats = [
+            ZXing.BarcodeFormat.CODE_128,
+            ZXing.BarcodeFormat.CODE_39,
+            ZXing.BarcodeFormat.CODE_93,
+            ZXing.BarcodeFormat.EAN_13,
+            ZXing.BarcodeFormat.EAN_8,
+            ZXing.BarcodeFormat.UPC_A,
+            ZXing.BarcodeFormat.UPC_E,
+            ZXing.BarcodeFormat.QR_CODE,
+            ZXing.BarcodeFormat.ITF,
+            ZXing.BarcodeFormat.CODABAR
+          ];
+          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+
+          codeReader = new ZXing.BrowserMultiFormatReader(hints);
+
+          const video = document.getElementById('scanner-video');
+
+          // Richiedi fotocamera posteriore
+          const constraints = {
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }
+          };
+
+          videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+          video.srcObject = videoStream;
+
+          isScanning = true;
+          document.getElementById('scanner-loading').style.display = 'none';
+          document.getElementById('scanner-reader').style.display = 'block';
+          document.getElementById('stop-scanner').style.display = 'inline-block';
+
+          // Decodifica continua
+          scanBarcodeFromVideo();
+
+        } catch (err) {
+          document.getElementById('scanner-loading').style.display = 'none';
+          alert('Errore accesso fotocamera: ' + err.message + '\n\nVerifica i permessi nelle impostazioni del browser.');
+          console.error('Camera error:', err);
+          isScanning = false;
+        }
+      }
+
+      // Funzione per decodificare barcode dal video
+      async function scanBarcodeFromVideo() {
+        if (!isScanning) return;
+
+        try {
+          const video = document.getElementById('scanner-video');
+          const result = await codeReader.decodeFromVideoElement(video);
+
+          if (result) {
+            // Barcode scansionato con successo
+            if (currentScannerInput) {
+              currentScannerInput.value = result.text;
+              currentScannerInput.focus();
+            }
+
+            // Mostra risultato
+            const resultDiv = document.getElementById('scanner-result');
+            resultDiv.textContent = `✓ Scansionato: ${result.text}`;
+            resultDiv.style.display = 'block';
+
+            // Ferma lo scanner dopo successo
+            setTimeout(() => {
+              stopScanner();
+              setTimeout(() => {
+                document.getElementById('scanner-modal').style.display = 'none';
+              }, 1500);
+            }, 500);
+          }
+        } catch (err) {
+          // Continua a provare se non trova barcode
+          if (isScanning) {
+            requestAnimationFrame(scanBarcodeFromVideo);
+          }
+        }
+      }
+
+      // Gestione stop scanner
+      function stopScanner() {
+        isScanning = false;
+
+        // Ferma il video stream
+        if (videoStream) {
+          videoStream.getTracks().forEach(track => track.stop());
+          videoStream = null;
+        }
+
+        // Reset video element
+        const video = document.getElementById('scanner-video');
+        if (video) {
+          video.srcObject = null;
+        }
+
+        // Reset code reader
+        if (codeReader) {
+          codeReader.reset();
+          codeReader = null;
+        }
+
+        document.getElementById('stop-scanner').style.display = 'none';
+      }
+
+      document.getElementById('stop-scanner').addEventListener('click', stopScanner);
+
+      // Gestione chiusura modale scanner
+      document.getElementById('close-scanner').addEventListener('click', () => {
+        stopScanner();
+        document.getElementById('scanner-modal').style.display = 'none';
+      });
+
+      // Chiudi modale scanner cliccando fuori
+      document.getElementById('scanner-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'scanner-modal') {
+          stopScanner();
+          document.getElementById('scanner-modal').style.display = 'none';
+        }
+      });
+
+      // ============================================
+      // SUPPORTO SCANNER USB (input da tastiera)
+      // ============================================
+
+      let usbScannerBuffer = '';
+      let usbScannerTimeout = null;
+
+      // Rileva input rapido da scanner USB
+      document.addEventListener('keypress', (e) => {
+        if (document.activeElement.tagName === 'INPUT' ||
+            document.activeElement.tagName === 'TEXTAREA') {
+          return;
+        }
+
+        if (e.key === 'Enter' && usbScannerBuffer.length > 0) {
+          const rows = document.querySelectorAll('#tabella-body tr');
+          for (let row of rows) {
+            const inputs = row.querySelectorAll('input[type="text"]');
+            const trackingInput = inputs[2];
+            if (trackingInput && !trackingInput.value.trim()) {
+              trackingInput.value = usbScannerBuffer.trim();
+              trackingInput.focus();
+
+              // Feedback visivo
+              trackingInput.style.backgroundColor = '#28a745';
+              trackingInput.style.color = '#fff';
+              setTimeout(() => {
+                trackingInput.style.backgroundColor = '';
+                trackingInput.style.color = '';
+              }, 1000);
+
+              break;
+            }
+          }
+          usbScannerBuffer = '';
+        } else {
+          usbScannerBuffer += e.key;
+          clearTimeout(usbScannerTimeout);
+          usbScannerTimeout = setTimeout(() => {
+            usbScannerBuffer = '';
+          }, 100);
+        }
+      });
+    });
+  </script>
+
+  </div><!-- End main-content -->
+
+</body>
+</html>

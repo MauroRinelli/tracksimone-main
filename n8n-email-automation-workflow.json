@@ -1,0 +1,177 @@
+{
+  "name": "Form Email Automation - Edicola Calcio Point",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "form-email-sender",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Form Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "form-email-sender"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validazione dei dati ricevuti dal form\nconst body = $input.item.json.body;\n\n// Verifica che ci siano tutti i campi necessari\nif (!body || !body.senderName || !body.message || !body.recipients) {\n  return {\n    valid: false,\n    error: 'Dati mancanti: senderName, message o recipients'\n  };\n}\n\n// Verifica che ci siano destinatari\nif (!Array.isArray(body.recipients) || body.recipients.length === 0) {\n  return {\n    valid: false,\n    error: 'Nessun destinatario selezionato'\n  };\n}\n\n// Valida ogni destinatario\nfor (let i = 0; i < body.recipients.length; i++) {\n  const recipient = body.recipients[i];\n  \n  if (!recipient.name || !recipient.email) {\n    return {\n      valid: false,\n      error: `Destinatario ${i + 1}: nome o email mancanti`\n    };\n  }\n  \n  // Valida formato email\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  if (!emailRegex.test(recipient.email)) {\n    return {\n      valid: false,\n      error: `Destinatario ${i + 1}: email non valida (${recipient.email})`\n    };\n  }\n}\n\n// Validazione OK\nreturn {\n  valid: true,\n  senderName: body.senderName,\n  message: body.message,\n  recipients: body.recipients,\n  totalRecipients: body.recipients.length\n};"
+      },
+      "id": "validation-node",
+      "name": "Validazione Dati",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.valid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-valid-node",
+      "name": "IF Valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Elabora i dati per preparare gli invii multipli\nconst data = $input.item.json;\nconst recipients = data.recipients;\nconst senderName = data.senderName;\nconst message = data.message;\n\n// Crea un array di item, uno per ogni destinatario\nconst items = recipients.map(recipient => {\n  return {\n    json: {\n      recipientName: recipient.name,\n      recipientEmail: recipient.email,\n      senderName: senderName,\n      message: message,\n      subject: `Tracking Spedizione - ${senderName}`\n    }\n  };\n});\n\nreturn items;"
+      },
+      "id": "elaboration-node",
+      "name": "Elaborazione",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "simone@solespress.it",
+        "toEmail": "={{ $json.recipientEmail }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.message }}",
+        "options": {
+          "senderName": "={{ $json.senderName }}"
+        }
+      },
+      "id": "send-email-node",
+      "name": "Invia Email (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1050, 200],
+      "credentials": {
+        "smtp": {
+          "id": "siteground-smtp",
+          "name": "Siteground SMTP - simone@solespress.it"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Email inviate con successo\", \"sent\": $('Elaborazione').itemMatching(0).json.recipients.length } }}"
+      },
+      "id": "response-ok-node",
+      "name": "Response OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": $json.error || 'Errore durante la validazione' } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "response-error-node",
+      "name": "Response Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Webhook - Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validazione Dati",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validazione Dati": {
+      "main": [
+        [
+          {
+            "node": "IF Valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valido": {
+      "main": [
+        [
+          {
+            "node": "Elaborazione",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elaborazione": {
+      "main": [
+        [
+          {
+            "node": "Invia Email (SMTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invia Email (SMTP)": {
+      "main": [
+        [
+          {
+            "node": "Response OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-15T10:00:00.000Z",
+  "versionId": "1"
+}
